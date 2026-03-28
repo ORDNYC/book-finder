@@ -15,9 +15,9 @@ for filename in os.listdir(folder_path):
         file_path = os.path.join(folder_path, filename)
         shop_name = filename.replace('.csv', '').replace('_', ' ').title()
         
-        # Get the "As Of" date from the file itself
+        # Capture the file modification date
         mod_time = os.path.getmtime(file_path)
-        shop_updates[shop_name] = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M')
+        shop_updates[shop_name] = datetime.fromtimestamp(mod_time).strftime('%d.%m.%Y %H:%M')
         
         try:
             df = pd.read_csv(file_path, sep=';', on_bad_lines='skip')
@@ -30,7 +30,7 @@ for filename in os.listdir(folder_path):
                 if isbn and isbn.lower() != 'nan' and len(isbn) >= 10:
                     if isbn not in combined_data:
                         combined_data[isbn] = {
-                            "title": str(row.get('Book Name', 'Unknown')),
+                            "title": str(row.get('Book Name', 'Unknown Title')),
                             "availability": {}
                         }
                     
@@ -42,7 +42,7 @@ for filename in os.listdir(folder_path):
             print(f"Error processing {filename}: {e}")
 
 output = {
-    "shop_dates": shop_updates, # New section!
+    "shop_dates": shop_updates,
     "books": combined_data
 }
 
