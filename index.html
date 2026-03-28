@@ -1,60 +1,145 @@
-import pandas as pd
-import json
-import os
-from datetime import datetime
-
-folder_path = 'data_sources'
-combined_data = {}
-shop_updates = {}
-
-# Ensure the folder exists
-if not os.path.exists(folder_path):
-    os.makedirs(folder_path)
-
-# Process every CSV in the data_sources folder
-for filename in os.listdir(folder_path):
-    if filename.endswith('.csv'):
-        file_path = os.path.join(folder_path, filename)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Availability Finder</title>
+    <style>
+        :root { --primary: #2563eb; --success: #059669; --danger: #dc2626; --bg: #f8fafc; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: #1e293b; max-width: 900px; margin: 0 auto; padding: 20px; line-height: 1.5; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        h1 { margin-top: 0; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 1rem; }
         
-        # Create a clean Shop Name from filename (e.g., 'babel_books' -> 'Babel Books')
-        shop_name = filename.replace('.csv', '').replace('_', ' ').title()
+        .rate-badge { float: right; font-size: 0.8rem; background: #e2e8f0; padding: 4px 12px; border-radius: 20px; color: #475569; }
         
-        # Get the "As Of" date from the file's metadata
-        mod_time = os.path.getmtime(file_path)
-        shop_updates[shop_name] = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M')
+        .search-area { display: flex; gap: 10px; margin: 2rem 0; }
+        input { flex: 1; padding: 12px 16px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s; }
+        input:focus { outline: none; border-color: var(--primary); }
+        button { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; }
         
-        try:
-            # Semicolon is standard for your exports
-            df = pd.read_csv(file_path, sep=';', on_bad_lines='skip')
-            df.columns = [c.strip() for c in df.columns]
+        #status { text-align: center; color: #64748b; margin: 2rem; }
+        
+        .book-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
+        .book-header { background: #f1f5f9; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+        .book-header h3 { margin: 0; font-size: 1.1rem; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+        th { font-size: 0.85rem; text-transform: uppercase; color: #64748b; }
+        
+        .czk-price { display: block; font-weight: bold; color: #1e293b; }
+        .eur-price { font-size: 0.85rem; color: #64748b; }
+        .as-of { font-size: 0.7rem; color: #94a3b8; display: block; }
+        
+        .tag-in { color: var(--success); font-weight: 700; }
+        .tag-out { color: var(--danger); font-weight: 700; opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div id="rateDisplay" class="rate-badge">Syncing exchange rate...</div>
+    <h1>📚 Book Finder</h1>
+    
+    <div class="search-area">
+        <input type="text" id="searchInput" placeholder="Search by title (e.g. 'Род') or ISBN...">
+        <button onclick="handleSearch()">Search</button>
+    </div>
+
+    <div id="status">⏳ Initializing database...</div>
+    <div id="results"></div>
+</div>
+
+<script>
+    let db = null;
+    let czkRate = 25.30; // Default fallback
+
+    // Initialize: Load Currency and Book Data
+    window.onload = async () => {
+        const status = document.getElementById('status');
+        try {
+            // 1. Get Live Rate
+            const rateReq = await fetch('https://open.er-api.com/v6/latest/EUR');
+            const rateData = await rateReq.json();
+            if(rateData.rates?.CZK) {
+                czkRate = rateData.rates.CZK;
+                document.getElementById('rateDisplay').innerText = `1 EUR = ${czkRate.toFixed(2)} CZK`;
+            }
+
+            // 2. Get Book Data
+            const dbReq = await fetch('books_lookup.json?v=' + Date.now());
+            db = await dbReq.json();
             
-            for _, row in df.iterrows():
-                raw_isbn = str(row.get('ISBN', ''))
-                # Clean ISBN: remove dashes, spaces, and decimals
-                isbn = raw_isbn.replace('-', '').replace(' ', '').split('.')[0]
-                
-                if isbn and isbn.lower() != 'nan' and len(isbn) >= 10:
-                    if isbn not in combined_data:
-                        combined_data[isbn] = {
-                            "title": str(row.get('Book Name', 'Unknown Title')),
-                            "availability": {}
-                        }
-                    
-                    # Add this shop's specific info to the book
-                    combined_data[isbn]["availability"][shop_name] = {
-                        "price": str(row.get('Price (EUR)', '0.00')),
-                        "in_stock": str(row.get('Available', 'No')).lower() == 'yes'
-                    }
-        except Exception as e:
-            print(f"Error processing {filename}: {e}")
+            status.style.display = 'none';
+        } catch (err) {
+            status.innerHTML = "❌ Error loading database. Please try refreshing.";
+            console.error(err);
+        }
+    };
 
-# Save in the format the new HTML expects
-output = {
-    "shop_dates": shop_updates,
-    "books": combined_data
-}
+    function handleSearch() {
+        const query = document.getElementById('searchInput').value.toLowerCase().trim();
+        const results = document.getElementById('results');
+        results.innerHTML = '';
 
-with open('books_lookup.json', 'w', encoding='utf-8') as f:
-    json.dump(output, f, ensure_ascii=False, indent=4)
+        if (!query || !db || !db.books) return;
 
-print(f"Successfully updated books_lookup.json with {len(combined_data)} books.")
+        let matchCount = 0;
+
+        for (const [isbn, data] of Object.entries(db.books)) {
+            const title = (data.title || "").toLowerCase();
+            
+            if (title.includes(query) || isbn.includes(query)) {
+                matchCount++;
+                renderBook(isbn, data, results);
+            }
+            if (matchCount >= 20) break; // Speed limit
+        }
+
+        if (matchCount === 0) results.innerHTML = `<p style="text-align:center; color:#64748b;">No books found matching "${query}"</p>`;
+    }
+
+    function renderBook(isbn, data, container) {
+        let rows = '';
+        
+        for (const [shop, info] of Object.entries(data.availability)) {
+            const eur = parseFloat(info.price.replace(',', '.')) || 0;
+            const czk = Math.round(eur * czkRate);
+            const date = (db.shop_dates && db.shop_dates[shop]) ? db.shop_dates[shop] : 'Recently';
+
+            rows += `
+                <tr>
+                    <td>
+                        <strong>${shop}</strong>
+                        <span class="as-of">Updated: ${date}</span>
+                    </td>
+                    <td>
+                        <span class="czk-price">${czk} CZK</span>
+                        <span class="eur-price">€${eur.toFixed(2)}</span>
+                    </td>
+                    <td class="${info.in_stock ? 'tag-in' : 'tag-out'}">
+                        ${info.in_stock ? '● IN STOCK' : '○ OUT OF STOCK'}
+                    </td>
+                </tr>`;
+        }
+
+        container.innerHTML += `
+            <div class="book-card">
+                <div class="book-header">
+                    <h3>${data.title}</h3>
+                    <code style="font-size:0.75rem;">ISBN: ${isbn}</code>
+                </div>
+                <table>
+                    <thead><tr><th>Store</th><th>Price</th><th>Availability</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    // Support Enter Key
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
+    });
+</script>
+</body>
+</html>
