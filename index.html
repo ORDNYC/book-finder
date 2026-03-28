@@ -3,131 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book Finder | Berlin & Beyond</title>
+    <title>Поиск книг| Live Prices</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 15px; line-height: 1.6; color: #333; }
-        h1 { color: #2c3e50; text-align: center; }
-        .search-container { margin-bottom: 30px; text-align: center; background: #f8f9fa; padding: 20px; border-radius: 8px; }
-        input { padding: 12px; width: 70%; max-width: 400px; border: 2px solid #ddd; border-radius: 4px; font-size: 16px; }
-        button { padding: 12px 20px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-left: 5px; }
-        button:hover { background: #2980b9; }
-        #loading { text-align: center; color: #7f8c8d; font-style: italic; margin-top: 20px; }
-        #error-msg { color: #e74c3c; background: #fadbd8; padding: 15px; border-radius: 5px; display: none; margin-top: 20px; border-left: 5px solid #e74c3c; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; display: none; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        body { font-family: -apple-system, sans-serif; max-width: 900px; margin: 20px auto; padding: 15px; background: #f0f2f5; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .search-box { display: flex; gap: 10px; margin: 20px 0; }
+        input { flex: 1; padding: 14px; border: 2px solid #ddd; border-radius: 6px; font-size: 16px; }
+        button { padding: 14px 25px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        
+        .rate-info { font-size: 0.85em; color: #666; margin-bottom: 10px; text-align: right; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; border: 1px solid #eee; text-align: left; }
+        th { background: #f8f9fa; color: #555; }
+        
+        .as-of { font-size: 0.75em; color: #888; display: block; margin-top: 4px; }
+        .price-czk { font-weight: bold; color: #d35400; display: block; margin-top: 2px; }
         .in-stock { color: #27ae60; font-weight: bold; }
         .out-of-stock { color: #c0392b; }
-        .book-info { margin-bottom: 10px; padding: 10px; border-bottom: 2px solid #3498db; }
+        .book-result { background: #fff; border: 1px solid #e1e4e8; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
+        h3 { margin-top: 0; color: #1a1a1a; }
     </style>
 </head>
 <body>
 
-    <h1>📚 Book Availability Finder</h1>
+<div class="card">
+    <h1>📚 Inventory & Price Search</h1>
+    
+    <div id="rateDisplay" class="rate-info">Fetching live exchange rate...</div>
 
-    <div class="search-container">
-        <input type="text" id="isbnInput" placeholder="Enter ISBN (e.g., 9785890595904)">
-        <button onclick="searchBook()">Search</button>
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search by Title (partial) or ISBN...">
+        <button onclick="doSearch()">Search</button>
     </div>
 
-    <div id="loading">⏳ Connecting to database...</div>
-    <div id="error-msg"></div>
+    <div id="status">Loading database...</div>
+    <div id="resultsContainer"></div>
+</div>
 
-    <div id="results">
-        <div id="bookDetail" class="book-info" style="display:none;"></div>
-        <table id="shopsTable">
-            <thead>
-                <tr>
-                    <th>Bookstore</th>
-                    <th>Price</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-        </table>
-    </div>
+<script>
+    let masterData = null;
+    let eurToCzkRate = 25.30; // Fallback rate if API fails
 
-    <script>
-        let masterData = null;
+    // 1. FETCH LIVE EXCHANGE RATE & DATABASE
+    window.onload = async () => {
+        const status = document.getElementById('status');
+        const rateDisplay = document.getElementById('rateDisplay');
 
-        // LOAD DATA ON STARTUP
-        window.onload = async () => {
-            const loadingDiv = document.getElementById('loading');
-            const errorDiv = document.getElementById('error-msg');
-            
-            try {
-                // Use a 'cache-buster' timestamp to ensure we don't load an old version of the file
-                const response = await fetch('books_lookup.json?v=' + Date.now());
-                
-                if (!response.ok) {
-                    throw new Error(`Database file not found (Status ${response.status}). Ensure 'books_lookup.json' is in the main folder.`);
-                }
-                
-                masterData = await response.json();
-                
-                if (!masterData.books || Object.keys(masterData.books).length === 0) {
-                    throw new Error("The database is empty. Check your Python script output.");
-                }
-
-                loadingDiv.style.display = 'none';
-                console.log("Successfully loaded " + Object.keys(masterData.books).length + " books.");
-
-            } catch (error) {
-                loadingDiv.style.display = 'none';
-                errorDiv.style.display = 'block';
-                errorDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
-                console.error("Initialization Error:", error);
-            }
-        };
-
-        // SEARCH FUNCTION
-        function searchBook() {
-            const input = document.getElementById('isbnInput').value.trim().replace(/-/g, '');
-            const table = document.getElementById('shopsTable');
-            const tableBody = document.getElementById('tableBody');
-            const bookDetail = document.getElementById('bookDetail');
-            const errorDiv = document.getElementById('error-msg');
-
-            // Reset UI
-            tableBody.innerHTML = '';
-            table.style.display = 'none';
-            bookDetail.style.display = 'none';
-            errorDiv.style.display = 'none';
-
-            if (!masterData) {
-                alert("Database is still loading or failed to load.");
-                return;
+        try {
+            // Fetch Currency First
+            const rateResp = await fetch('https://open.er-api.com/v6/latest/EUR');
+            const rateData = await rateResp.json();
+            if(rateData.rates && rateData.rates.CZK) {
+                eurToCzkRate = rateData.rates.CZK;
+                rateDisplay.innerHTML = `Live Rate: 1 EUR = ${eurToCzkRate.toFixed(2)} CZK`;
             }
 
-            if (masterData.books[input]) {
-                const book = masterData.books[input];
-                
-                // Show Book Title
-                bookDetail.innerHTML = `<h3>Found: ${book.title}</h3><p>ISBN: ${input}</p>`;
-                bookDetail.style.display = 'block';
+            // Fetch Book Database
+            const dbResp = await fetch('books_lookup.json?v=' + Date.now());
+            masterData = await dbResp.json();
+            status.style.display = 'none';
+        } catch (e) {
+            status.innerHTML = "⚠️ Ошибка загрузки данных. Обновите страницу.";
+            console.error(e);
+        }
+    };
 
-                // Build Table
-                for (const [shop, info] of Object.entries(book.availability)) {
-                    const row = `<tr>
-                        <td>${shop}</td>
-                        <td>${info.price}</td>
-                        <td class="${info.in_stock ? 'in-stock' : 'out-of-stock'}">
-                            ${info.in_stock ? '✅ In Stock' : '❌ Out of Stock'}
-                        </td>
-                    </tr>`;
-                    tableBody.innerHTML += row;
-                }
-                table.style.display = 'table';
-            } else {
-                errorDiv.style.display = 'block';
-                errorDiv.innerHTML = `No data found for ISBN: ${input}. Try another!`;
+    // 2. PARTIAL NAME & ISBN SEARCH
+    function doSearch() {
+        const query = document.getElementById('searchInput').value.toLowerCase().trim();
+        const container = document.getElementById('resultsContainer');
+        container.innerHTML = '';
+
+        if (!query || !masterData) return;
+
+        let foundCount = 0;
+        for (const [isbn, book] of Object.entries(masterData.books)) {
+            // Check ISBN OR Partial Title Match
+            if (isbn.includes(query) || book.title.toLowerCase().includes(query)) {
+                foundCount++;
+                renderBookUI(isbn, book, container);
             }
+            if (foundCount >= 15) break; // Optimization
         }
 
-        // Allow pressing "Enter" to search
-        document.getElementById('isbnInput').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') searchBook();
-        });
-    </script>
+        if (foundCount === 0) container.innerHTML = "<p>Не найдено '" + query + "'.</p>";
+    }
+
+    // 3. RENDER RESULTS TABLE
+    function renderBookUI(isbn, book, container) {
+        let rows = '';
+        
+        for (const [shop, info] of Object.entries(book.availability)) {
+            // Clean price string (handle "15,50" or "15.50")
+            const cleanPrice = info.price.replace(',', '.');
+            const eurPrice = parseFloat(cleanPrice) || 0;
+            const czkPrice = (eurPrice * eurToCzkRate).toFixed(2);
+            
+            const fileDate = masterData.shop_dates[shop] || 'Recently';
+
+            rows += `
+                <tr>
+                    <td>
+                        <strong>${shop}</strong>
+                        <span class="as-of">File Date: ${fileDate}</span>
+                    </td>
+                    <td>
+                        €${eurPrice.toFixed(2)}
+                        <span class="price-czk">~ ${czkPrice} CZK</span>
+                    </td>
+                    <td class="${info.in_stock ? 'in-stock' : 'out-of-stock'}">
+                        ${info.in_stock ? '✅ На складе' : '❌ отсутствует'}
+                    </td>
+                </tr>`;
+        }
+
+        container.innerHTML += `
+            <div class="book-result">
+                <h3>${book.title}</h3>
+                <small style="color:#666">ISBN: ${isbn}</small>
+                <table>
+                    <thead>
+                        <tr><th>Store</th><th>Price</th><th>Availability</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    // Enter key support
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') doSearch();
+    });
+</script>
 </body>
 </html>
