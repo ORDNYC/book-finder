@@ -6,9 +6,9 @@
     <title>Поиск книг</title>
     <style>
         :root { --blue: #2563eb; --green: #059669; --red: #dc2626; }
-        body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #1e293b; max-width: 900px; margin: 0 auto; padding: 20px; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #1e293b; max-width: 900px; margin: 0 auto; padding: 20px; min-height: 100vh; display: flex; flex-direction: column; }
         .banner { text-align: center; font-size: 0.8rem; background: #1e293b; color: white; padding: 8px; border-radius: 8px; margin-bottom: 15px; }
-        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex-grow: 1; }
         .search-row { display: flex; gap: 10px; margin: 20px 0; }
         input { flex: 1; padding: 12px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 1rem; }
         button { background: var(--blue); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; }
@@ -22,6 +22,11 @@
         .stock-no { color: var(--red); font-weight: bold; opacity: 0.6; }
         .book-block { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; overflow: hidden; }
         .book-header { background: #f1f5f9; padding: 10px 15px; border-bottom: 1px solid #e2e8f0; }
+
+        /* FOOTER STYLES */
+        footer { margin-top: 40px; padding: 20px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 0.85rem; line-height: 1.6; }
+        .shop-list { color: #1e293b; font-weight: 500; margin-bottom: 10px; }
+        .disclaimer { font-style: italic; opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -41,6 +46,13 @@
     <div id="results"></div>
 </div>
 
+<footer>
+    <div class="shop-list" id="footerShops">Поиск по магазинам: Загрузка...</div>
+    <div class="disclaimer">
+        <strong>Правовая информация:</strong> Все данные о ценах и наличии получены из открытых публичных источников в соответствии с законодательством. Проект носит ознакомительный характер и не является публичной офертой.
+    </div>
+</footer>
+
 <script>
     let db = null;
     let czkRate = 25.30;
@@ -59,8 +71,16 @@
             const b = await fetch('books_lookup.json?v=' + Date.now());
             db = await b.json();
             
+            // Update Banner
             const firstDate = Object.values(db.shop_dates || {})[0] || 'недавно';
             document.getElementById('topBanner').innerText = `Данные обновлены: ${firstDate}`;
+            
+            // UPDATE FOOTER SHOP LIST
+            const shopNames = Object.keys(db.shop_dates || {});
+            if (shopNames.length > 0) {
+                document.getElementById('footerShops').innerText = "Поиск по магазинам: " + shopNames.join(', ');
+            }
+
             document.getElementById('loader').style.display = 'none';
         } catch (e) {
             document.getElementById('loader').innerText = "Ошибка загрузки данных.";
@@ -102,6 +122,10 @@
             <table>${rows}</table>
         </div>`;
     }
+
+    document.getElementById('q').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') runSearch();
+    });
 </script>
 </body>
 </html>
