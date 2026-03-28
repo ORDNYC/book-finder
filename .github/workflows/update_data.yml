@@ -1,31 +1,26 @@
-name: Update Book Database
+name: Auto-update book database
 on:
   push:
-    paths:
-      - 'data_sources/**' # Triggers only when files in this folder change
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
+      - uses: actions/checkout@v3
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-
       - name: Install dependencies
         run: pip install pandas
-
-      - name: Run processing script
+      - name: Run script
         run: python process_data.py
-
-      - name: Commit and push changes
+      - name: Commit and Push
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
           git add books_lookup.json
-          git commit -m "Auto-update book database" || exit 0
+          git commit -m "Auto-update database" || exit 0
           git push --force
