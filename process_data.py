@@ -1,48 +1,50 @@
 import pandas as pd
 import json
 import os
+from datetime import datetime
 
-# 1. Point to your folder of CSVs
 folder_path = 'data_sources'
 combined_data = {}
-all_shop_names = []
+shop_updates = {}
 
-# 2. Iterate through every file in that folder
+if not os.path.exists(folder_path):
+    os.makedirs(folder_path)
+
 for filename in os.listdir(folder_path):
     if filename.endswith('.csv'):
-        # Use filename as Shop Name (e.g., "babel_books" instead of "babel_books.csv")
+        file_path = os.path.join(folder_path, filename)
         shop_name = filename.replace('.csv', '').replace('_', ' ').title()
-        all_shop_names.append(shop_name)
+        
+        # Get the "As Of" date from the file itself
+        mod_time = os.path.getmtime(file_path)
+        shop_updates[shop_name] = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M')
         
         try:
-            # Read the file
-            df = pd.read_csv(os.path.join(folder_path, filename), sep=';')
-            df.columns = [c.strip() for c in df.columns] # Clean column names
+            df = pd.read_csv(file_path, sep=';', on_bad_lines='skip')
+            df.columns = [c.strip() for c in df.columns]
             
             for _, row in df.iterrows():
-                isbn = str(row.get('ISBN', '')).replace('-', '').replace(' ', '').split('.')[0]
+                raw_isbn = str(row.get('ISBN', ''))
+                isbn = raw_isbn.replace('-', '').replace(' ', '').split('.')[0]
                 
-                if len(isbn) >= 10:
+                if isbn and isbn.lower() != 'nan' and len(isbn) >= 10:
                     if isbn not in combined_data:
                         combined_data[isbn] = {
-                            "title": row.get('Book Name'),
+                            "title": str(row.get('Book Name', 'Unknown')),
                             "availability": {}
                         }
                     
                     combined_data[isbn]["availability"][shop_name] = {
-                        "price": row.get('Price (EUR)'),
+                        "price": str(row.get('Price (EUR)', '0.00')),
                         "in_stock": str(row.get('Available', 'No')).lower() == 'yes'
                     }
         except Exception as e:
             print(f"Error processing {filename}: {e}")
 
-# 3. Save the data AND the list of shops found
 output = {
-    "shops": all_shop_names,
+    "shop_dates": shop_updates, # New section!
     "books": combined_data
 }
 
 with open('books_lookup.json', 'w', encoding='utf-8') as f:
     json.dump(output, f, ensure_ascii=False, indent=4)
-
-print(f"Success! Processed {len(all_shop_names)} shops and {len(combined_data)} books.")
