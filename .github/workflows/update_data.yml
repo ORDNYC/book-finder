@@ -28,4 +28,4 @@ jobs:
           git config --global user.email "action@github.com"
           git add books_lookup.json
           git commit -m "Auto-update book database" || exit 0
-          git push
+          git push --force
