@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Spec Finder</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding: 40px; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 600px; }
+        h1 { color: #2c3e50; font-size: 1.5rem; margin-bottom: 1.5rem; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 2rem; }
+        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
+        button { background: #3498db; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #2980b9; }
+        #results { border-top: 1px solid #eee; padding-top: 20px; display: none; }
+        .loading { font-style: italic; color: #7f8c8d; }
+        .spec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
+        .label { font-weight: bold; color: #7f8c8d; font-size: 0.85rem; display: block; }
+        .value { color: #2c3e50; font-size: 1rem; }
+        .badge { background: #e8f4fd; color: #3498db; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>Book Specification Lookup</h1>
+    <div class="search-box">
+        <input type="text" id="isbnInput" placeholder="Enter ISBN (e.g., 9785890595904)">
+        <button onclick="performSearch()">Search</button>
+    </div>
+
+    <div id="loading" class="loading" style="display: none;">Fetching details...</div>
+
+    <div id="results">
+        <h2 id="resTitle">Book Title</h2>
+        <div id="resPrice" style="margin-bottom: 15px;"></div>
+        
+        <div class="spec-grid">
+            <div><span class="label">ISBN</span><span class="value" id="resISBN">-</span></div>
+            <div><span class="label">AVAILABILITY</span><span class="value" id="resAvail">-</span></div>
+            <div><span class="label">HEIGHT</span><span class="value" id="resHeight">N/A</span></div>
+            <div><span class="label">WIDTH</span><span class="value" id="resWidth">N/A</span></div>
+            <div><span class="label">THICKNESS</span><span class="value" id="resThick">N/A</span></div>
+            <div><span class="label">WEIGHT</span><span class="value" id="resWeight">N/A</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+let bookDatabase = {};
+
+// Load your CSV-derived JSON data
+fetch('books_lookup.json')
+    .then(response => response.json())
+    .then(data => { bookDatabase = data; })
+    .catch(err => console.error("Could not load local database:", err));
+
+async function performSearch() {
+    const rawIsbn = document.getElementById('isbnInput').value.replace(/[-\s]/g, '');
+    const resultsDiv = document.getElementById('results');
+    const loadingDiv = document.getElementById('loading');
+
+    if (!rawIsbn) return;
+
+    loadingDiv.style.display = 'block';
+    resultsDiv.style.display = 'none';
+
+    // 1. Check local CSV data for basic info
+    const localData = bookDatabase[rawIsbn];
+    
+    // 2. Fetch technical specs from Google Books API
+    let apiData = null;
+    try {
+        const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${rawIsbn}`);
+        const data = await response.json();
+        if (data.totalItems > 0) {
+            apiData = data.items[0].volumeInfo;
+        }
+    } catch (e) { console.error("API error", e); }
+
+    // 3. Display Results
+    loadingDiv.style.display = 'none';
+    resultsDiv.style.display = 'block';
+
+    document.getElementById('resTitle').innerText = localData ? localData.title : (apiData ? apiData.title : "Unknown Title");
+    document.getElementById('resISBN').innerText = rawIsbn;
+    document.getElementById('resPrice').innerHTML = localData ? `<span class="badge">Price: €${localData.price}</span>` : "";
+    document.getElementById('resAvail').innerText = localData ? localData.available : "N/A";
+
+    if (apiData && apiData.dimensions) {
+        document.getElementById('resHeight').innerText = apiData.dimensions.height || "N/A";
+        document.getElementById('resWidth').innerText = apiData.dimensions.width || "N/A";
+        document.getElementById('resThick').innerText = apiData.dimensions.thickness || "N/A";
+    } else {
+        document.getElementById('resHeight').innerText = "N/A";
+        document.getElementById('resWidth').innerText = "N/A";
+        document.getElementById('resThick').innerText = "N/A";
+    }
+
+    // Weight is rarely available in public APIs, but we'll try page count as a proxy
+    document.getElementById('resWeight').innerText = apiData && apiData.pageCount ? `~${Math.round(apiData.pageCount * 1.5)}g (Est.)` : "N/A";
+}
+</script>
+
+</body>
+</html>
