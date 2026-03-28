@@ -1,6 +1,9 @@
 name: Auto-update book database
+
 on:
   push:
+    paths:
+      - 'data_sources/**'
     branches: [ main ]
   workflow_dispatch:
 
@@ -8,15 +11,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+
       - name: Install dependencies
         run: pip install pandas
-      - name: Run script
+
+      - name: Run processing script
         run: python process_data.py
+
       - name: Commit and Push
         run: |
           git config --global user.name "GitHub Action"
