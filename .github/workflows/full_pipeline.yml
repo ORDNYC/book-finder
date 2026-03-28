@@ -1,0 +1,45 @@
+name: Hourly Scraper and Site Update
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  update-everything:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Step 1 - Run Scraper
+        run: python shopify_scraper2.py 
+
+      - name: Step 2 - Organize Files
+        run: |
+          mkdir -p data_sources
+          # Перемещаем только новые CSV файлы в папку данных
+          mv *.csv data_sources/ 2>/dev/null || true
+
+      - name: Step 3 - Update JSON for Website
+        run: python process_data.py 
+
+      - name: Step 4 - Commit and Push changes
+        run: |
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "action@github.com"
+          git add data_sources/*.csv books_lookup.json
+          git commit -m "Automated hourly update: $(date +'%Y-%m-%d %H:%M')" || exit 0
+          git push
