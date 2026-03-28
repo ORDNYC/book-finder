@@ -1,140 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Поиск книг| Live Prices</title>
-    <style>
-        body { font-family: -apple-system, sans-serif; max-width: 900px; margin: 20px auto; padding: 15px; background: #f0f2f5; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .search-box { display: flex; gap: 10px; margin: 20px 0; }
-        input { flex: 1; padding: 14px; border: 2px solid #ddd; border-radius: 6px; font-size: 16px; }
-        button { padding: 14px 25px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #0056b3; }
+import pandas as pd
+import json
+import os
+from datetime import datetime
+
+folder_path = 'data_sources'
+combined_data = {}
+shop_updates = {}
+
+# Ensure the folder exists
+if not os.path.exists(folder_path):
+    os.makedirs(folder_path)
+
+# Process every CSV in the data_sources folder
+for filename in os.listdir(folder_path):
+    if filename.endswith('.csv'):
+        file_path = os.path.join(folder_path, filename)
         
-        .rate-info { font-size: 0.85em; color: #666; margin-bottom: 10px; text-align: right; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px; border: 1px solid #eee; text-align: left; }
-        th { background: #f8f9fa; color: #555; }
+        # Create a clean Shop Name from filename (e.g., 'babel_books' -> 'Babel Books')
+        shop_name = filename.replace('.csv', '').replace('_', ' ').title()
         
-        .as-of { font-size: 0.75em; color: #888; display: block; margin-top: 4px; }
-        .price-czk { font-weight: bold; color: #d35400; display: block; margin-top: 2px; }
-        .in-stock { color: #27ae60; font-weight: bold; }
-        .out-of-stock { color: #c0392b; }
-        .book-result { background: #fff; border: 1px solid #e1e4e8; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
-        h3 { margin-top: 0; color: #1a1a1a; }
-    </style>
-</head>
-<body>
-
-<div class="card">
-    <h1>📚 Inventory & Price Search</h1>
-    
-    <div id="rateDisplay" class="rate-info">Fetching live exchange rate...</div>
-
-    <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Search by Title (partial) or ISBN...">
-        <button onclick="doSearch()">Search</button>
-    </div>
-
-    <div id="status">Loading database...</div>
-    <div id="resultsContainer"></div>
-</div>
-
-<script>
-    let masterData = null;
-    let eurToCzkRate = 25.30; // Fallback rate if API fails
-
-    // 1. FETCH LIVE EXCHANGE RATE & DATABASE
-    window.onload = async () => {
-        const status = document.getElementById('status');
-        const rateDisplay = document.getElementById('rateDisplay');
-
-        try {
-            // Fetch Currency First
-            const rateResp = await fetch('https://open.er-api.com/v6/latest/EUR');
-            const rateData = await rateResp.json();
-            if(rateData.rates && rateData.rates.CZK) {
-                eurToCzkRate = rateData.rates.CZK;
-                rateDisplay.innerHTML = `Live Rate: 1 EUR = ${eurToCzkRate.toFixed(2)} CZK`;
-            }
-
-            // Fetch Book Database
-            const dbResp = await fetch('books_lookup.json?v=' + Date.now());
-            masterData = await dbResp.json();
-            status.style.display = 'none';
-        } catch (e) {
-            status.innerHTML = "⚠️ Ошибка загрузки данных. Обновите страницу.";
-            console.error(e);
-        }
-    };
-
-    // 2. PARTIAL NAME & ISBN SEARCH
-    function doSearch() {
-        const query = document.getElementById('searchInput').value.toLowerCase().trim();
-        const container = document.getElementById('resultsContainer');
-        container.innerHTML = '';
-
-        if (!query || !masterData) return;
-
-        let foundCount = 0;
-        for (const [isbn, book] of Object.entries(masterData.books)) {
-            // Check ISBN OR Partial Title Match
-            if (isbn.includes(query) || book.title.toLowerCase().includes(query)) {
-                foundCount++;
-                renderBookUI(isbn, book, container);
-            }
-            if (foundCount >= 15) break; // Optimization
-        }
-
-        if (foundCount === 0) container.innerHTML = "<p>Не найдено '" + query + "'.</p>";
-    }
-
-    // 3. RENDER RESULTS TABLE
-    function renderBookUI(isbn, book, container) {
-        let rows = '';
+        # Get the "As Of" date from the file's metadata
+        mod_time = os.path.getmtime(file_path)
+        shop_updates[shop_name] = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M')
         
-        for (const [shop, info] of Object.entries(book.availability)) {
-            // Clean price string (handle "15,50" or "15.50")
-            const cleanPrice = info.price.replace(',', '.');
-            const eurPrice = parseFloat(cleanPrice) || 0;
-            const czkPrice = (eurPrice * eurToCzkRate).toFixed(2);
+        try:
+            # Semicolon is standard for your exports
+            df = pd.read_csv(file_path, sep=';', on_bad_lines='skip')
+            df.columns = [c.strip() for c in df.columns]
             
-            const fileDate = masterData.shop_dates[shop] || 'Recently';
+            for _, row in df.iterrows():
+                raw_isbn = str(row.get('ISBN', ''))
+                # Clean ISBN: remove dashes, spaces, and decimals
+                isbn = raw_isbn.replace('-', '').replace(' ', '').split('.')[0]
+                
+                if isbn and isbn.lower() != 'nan' and len(isbn) >= 10:
+                    if isbn not in combined_data:
+                        combined_data[isbn] = {
+                            "title": str(row.get('Book Name', 'Unknown Title')),
+                            "availability": {}
+                        }
+                    
+                    # Add this shop's specific info to the book
+                    combined_data[isbn]["availability"][shop_name] = {
+                        "price": str(row.get('Price (EUR)', '0.00')),
+                        "in_stock": str(row.get('Available', 'No')).lower() == 'yes'
+                    }
+        except Exception as e:
+            print(f"Error processing {filename}: {e}")
 
-            rows += `
-                <tr>
-                    <td>
-                        <strong>${shop}</strong>
-                        <span class="as-of">File Date: ${fileDate}</span>
-                    </td>
-                    <td>
-                        €${eurPrice.toFixed(2)}
-                        <span class="price-czk">~ ${czkPrice} CZK</span>
-                    </td>
-                    <td class="${info.in_stock ? 'in-stock' : 'out-of-stock'}">
-                        ${info.in_stock ? '✅ На складе' : '❌ отсутствует'}
-                    </td>
-                </tr>`;
-        }
+# Save in the format the new HTML expects
+output = {
+    "shop_dates": shop_updates,
+    "books": combined_data
+}
 
-        container.innerHTML += `
-            <div class="book-result">
-                <h3>${book.title}</h3>
-                <small style="color:#666">ISBN: ${isbn}</small>
-                <table>
-                    <thead>
-                        <tr><th>Store</th><th>Price</th><th>Availability</th></tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>`;
-    }
+with open('books_lookup.json', 'w', encoding='utf-8') as f:
+    json.dump(output, f, ensure_ascii=False, indent=4)
 
-    // Enter key support
-    document.getElementById('searchInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') doSearch();
-    });
-</script>
-</body>
-</html>
+print(f"Successfully updated books_lookup.json with {len(combined_data)} books.")
