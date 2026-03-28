@@ -3,143 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book Availability Finder</title>
+    <title>Book Finder | Berlin & Beyond</title>
     <style>
-        :root { --primary: #2563eb; --success: #059669; --danger: #dc2626; --bg: #f8fafc; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: #1e293b; max-width: 900px; margin: 0 auto; padding: 20px; line-height: 1.5; }
-        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        h1 { margin-top: 0; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 1rem; }
-        
-        .rate-badge { float: right; font-size: 0.8rem; background: #e2e8f0; padding: 4px 12px; border-radius: 20px; color: #475569; }
-        
-        .search-area { display: flex; gap: 10px; margin: 2rem 0; }
-        input { flex: 1; padding: 12px 16px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s; }
-        input:focus { outline: none; border-color: var(--primary); }
-        button { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; }
-        
-        #status { text-align: center; color: #64748b; margin: 2rem; }
-        
-        .book-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
-        .book-header { background: #f1f5f9; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
-        .book-header h3 { margin: 0; font-size: 1.1rem; }
-        
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f1f5f9; }
-        th { font-size: 0.85rem; text-transform: uppercase; color: #64748b; }
-        
-        .czk-price { display: block; font-weight: bold; color: #1e293b; }
-        .eur-price { font-size: 0.85rem; color: #64748b; }
-        .as-of { font-size: 0.7rem; color: #94a3b8; display: block; }
-        
-        .tag-in { color: var(--success); font-weight: 700; }
-        .tag-out { color: var(--danger); font-weight: 700; opacity: 0.7; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 15px; line-height: 1.6; color: #333; }
+        h1 { color: #2c3e50; text-align: center; }
+        .search-container { margin-bottom: 30px; text-align: center; background: #f8f9fa; padding: 20px; border-radius: 8px; }
+        input { padding: 12px; width: 70%; max-width: 400px; border: 2px solid #ddd; border-radius: 4px; font-size: 16px; }
+        button { padding: 12px 20px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-left: 5px; }
+        button:hover { background: #2980b9; }
+        #loading { text-align: center; color: #7f8c8d; font-style: italic; margin-top: 20px; }
+        #error-msg { color: #e74c3c; background: #fadbd8; padding: 15px; border-radius: 5px; display: none; margin-top: 20px; border-left: 5px solid #e74c3c; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; display: none; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .in-stock { color: #27ae60; font-weight: bold; }
+        .out-of-stock { color: #c0392b; }
+        .book-info { margin-bottom: 10px; padding: 10px; border-bottom: 2px solid #3498db; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <div id="rateDisplay" class="rate-badge">Syncing exchange rate...</div>
-    <h1>📚 Book Finder</h1>
-    
-    <div class="search-area">
-        <input type="text" id="searchInput" placeholder="Search by title (e.g. 'Род') or ISBN...">
-        <button onclick="handleSearch()">Search</button>
+    <h1>📚 Book Availability Finder</h1>
+
+    <div class="search-container">
+        <input type="text" id="isbnInput" placeholder="Enter ISBN (e.g., 9785890595904)">
+        <button onclick="searchBook()">Search</button>
     </div>
 
-    <div id="status">⏳ Initializing database...</div>
-    <div id="results"></div>
-</div>
+    <div id="loading">⏳ Connecting to database...</div>
+    <div id="error-msg"></div>
 
-<script>
-    let db = null;
-    let czkRate = 25.30; // Default fallback
-
-    // Initialize: Load Currency and Book Data
-    window.onload = async () => {
-        const status = document.getElementById('status');
-        try {
-            // 1. Get Live Rate
-            const rateReq = await fetch('https://open.er-api.com/v6/latest/EUR');
-            const rateData = await rateReq.json();
-            if(rateData.rates?.CZK) {
-                czkRate = rateData.rates.CZK;
-                document.getElementById('rateDisplay').innerText = `1 EUR = ${czkRate.toFixed(2)} CZK`;
-            }
-
-            // 2. Get Book Data
-            const dbReq = await fetch('books_lookup.json?v=' + Date.now());
-            db = await dbReq.json();
-            
-            status.style.display = 'none';
-        } catch (err) {
-            status.innerHTML = "❌ Error loading database. Please try refreshing.";
-            console.error(err);
-        }
-    };
-
-    function handleSearch() {
-        const query = document.getElementById('searchInput').value.toLowerCase().trim();
-        const results = document.getElementById('results');
-        results.innerHTML = '';
-
-        if (!query || !db || !db.books) return;
-
-        let matchCount = 0;
-
-        for (const [isbn, data] of Object.entries(db.books)) {
-            const title = (data.title || "").toLowerCase();
-            
-            if (title.includes(query) || isbn.includes(query)) {
-                matchCount++;
-                renderBook(isbn, data, results);
-            }
-            if (matchCount >= 20) break; // Speed limit
-        }
-
-        if (matchCount === 0) results.innerHTML = `<p style="text-align:center; color:#64748b;">No books found matching "${query}"</p>`;
-    }
-
-    function renderBook(isbn, data, container) {
-        let rows = '';
-        
-        for (const [shop, info] of Object.entries(data.availability)) {
-            const eur = parseFloat(info.price.replace(',', '.')) || 0;
-            const czk = Math.round(eur * czkRate);
-            const date = (db.shop_dates && db.shop_dates[shop]) ? db.shop_dates[shop] : 'Recently';
-
-            rows += `
+    <div id="results">
+        <div id="bookDetail" class="book-info" style="display:none;"></div>
+        <table id="shopsTable">
+            <thead>
                 <tr>
-                    <td>
-                        <strong>${shop}</strong>
-                        <span class="as-of">Updated: ${date}</span>
-                    </td>
-                    <td>
-                        <span class="czk-price">${czk} CZK</span>
-                        <span class="eur-price">€${eur.toFixed(2)}</span>
-                    </td>
-                    <td class="${info.in_stock ? 'tag-in' : 'tag-out'}">
-                        ${info.in_stock ? '● IN STOCK' : '○ OUT OF STOCK'}
-                    </td>
-                </tr>`;
+                    <th>Bookstore</th>
+                    <th>Price</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let masterData = null;
+
+        // LOAD DATA ON STARTUP
+        window.onload = async () => {
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error-msg');
+            
+            try {
+                // Use a 'cache-buster' timestamp to ensure we don't load an old version of the file
+                const response = await fetch('books_lookup.json?v=' + Date.now());
+                
+                if (!response.ok) {
+                    throw new Error(`Database file not found (Status ${response.status}). Ensure 'books_lookup.json' is in the main folder.`);
+                }
+                
+                masterData = await response.json();
+                
+                if (!masterData.books || Object.keys(masterData.books).length === 0) {
+                    throw new Error("The database is empty. Check your Python script output.");
+                }
+
+                loadingDiv.style.display = 'none';
+                console.log("Successfully loaded " + Object.keys(masterData.books).length + " books.");
+
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
+                console.error("Initialization Error:", error);
+            }
+        };
+
+        // SEARCH FUNCTION
+        function searchBook() {
+            const input = document.getElementById('isbnInput').value.trim().replace(/-/g, '');
+            const table = document.getElementById('shopsTable');
+            const tableBody = document.getElementById('tableBody');
+            const bookDetail = document.getElementById('bookDetail');
+            const errorDiv = document.getElementById('error-msg');
+
+            // Reset UI
+            tableBody.innerHTML = '';
+            table.style.display = 'none';
+            bookDetail.style.display = 'none';
+            errorDiv.style.display = 'none';
+
+            if (!masterData) {
+                alert("Database is still loading or failed to load.");
+                return;
+            }
+
+            if (masterData.books[input]) {
+                const book = masterData.books[input];
+                
+                // Show Book Title
+                bookDetail.innerHTML = `<h3>Found: ${book.title}</h3><p>ISBN: ${input}</p>`;
+                bookDetail.style.display = 'block';
+
+                // Build Table
+                for (const [shop, info] of Object.entries(book.availability)) {
+                    const row = `<tr>
+                        <td>${shop}</td>
+                        <td>${info.price}</td>
+                        <td class="${info.in_stock ? 'in-stock' : 'out-of-stock'}">
+                            ${info.in_stock ? '✅ In Stock' : '❌ Out of Stock'}
+                        </td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                }
+                table.style.display = 'table';
+            } else {
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `No data found for ISBN: ${input}. Try another!`;
+            }
         }
 
-        container.innerHTML += `
-            <div class="book-card">
-                <div class="book-header">
-                    <h3>${data.title}</h3>
-                    <code style="font-size:0.75rem;">ISBN: ${isbn}</code>
-                </div>
-                <table>
-                    <thead><tr><th>Store</th><th>Price</th><th>Availability</th></tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>`;
-    }
-
-    // Support Enter Key
-    document.getElementById('searchInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearch();
-    });
-</script>
+        // Allow pressing "Enter" to search
+        document.getElementById('isbnInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') searchBook();
+        });
+    </script>
 </body>
 </html>
