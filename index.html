@@ -3,271 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Book Inventory & Specs</title>
+    <title>Book Finder | Berlin & Beyond</title>
     <style>
-        :root {
-            --primary: #2563eb;
-            --bg: #f8fafc;
-            --text: #1e293b;
-            --success: #16a34a;
-            --danger: #dc2626;
-            --gray: #64748b;
-        }
-
-        body { 
-            font-family: 'Inter', system-ui, sans-serif; 
-            background-color: var(--bg); 
-            color: var(--text);
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            padding: 40px 20px;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 800px;
-            background: white;
-            padding: 2rem;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-        }
-
-        h1 { margin-top: 0; font-size: 1.5rem; color: var(--text); }
-
-        .search-area {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 2rem;
-        }
-
-        input {
-            flex: 1;
-            padding: 14px;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        input:focus { border-color: var(--primary); }
-
-        button {
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 0 24px;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-
-        button:hover { opacity: 0.9; }
-
-        .result-section { display: none; animation: fadeIn 0.3s ease-in; }
-
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        .book-header {
-            border-bottom: 2px solid #f1f5f9;
-            padding-bottom: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .shop-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 2rem;
-        }
-
-        .shop-table th {
-            text-align: left;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            color: var(--gray);
-            padding: 12px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .shop-table td { padding: 16px 12px; border-bottom: 1px solid #f1f5f9; }
-
-        .status-pill {
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
-        .instock { background: #dcfce7; color: var(--success); }
-        .outstock { background: #fee2e2; color: var(--danger); }
-        .notcarried { background: #f1f5f9; color: var(--gray); }
-
-        .specs-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            background: #f8fafc;
-            padding: 1.5rem;
-            border-radius: 12px;
-        }
-
-        .spec-card span { display: block; }
-        .spec-label { font-size: 0.7rem; color: var(--gray); font-weight: bold; text-transform: uppercase; }
-        .spec-value { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
-
-        .loading { text-align: center; color: var(--gray); display: none; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 15px; line-height: 1.6; color: #333; }
+        h1 { color: #2c3e50; text-align: center; }
+        .search-container { margin-bottom: 30px; text-align: center; background: #f8f9fa; padding: 20px; border-radius: 8px; }
+        input { padding: 12px; width: 70%; max-width: 400px; border: 2px solid #ddd; border-radius: 4px; font-size: 16px; }
+        button { padding: 12px 20px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-left: 5px; }
+        button:hover { background: #2980b9; }
+        #loading { text-align: center; color: #7f8c8d; font-style: italic; margin-top: 20px; }
+        #error-msg { color: #e74c3c; background: #fadbd8; padding: 15px; border-radius: 5px; display: none; margin-top: 20px; border-left: 5px solid #e74c3c; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; display: none; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .in-stock { color: #27ae60; font-weight: bold; }
+        .out-of-stock { color: #c0392b; }
+        .book-info { margin-bottom: 10px; padding: 10px; border-bottom: 2px solid #3498db; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Book Inventory Search</h1>
-    
-    <div class="search-area">
-        <input type="text" id="isbnInput" placeholder="Scan or type ISBN (e.g. 9785890595904)">
-        <button onclick="handleSearch()">Search</button>
+    <h1>📚 Book Availability Finder</h1>
+
+    <div class="search-container">
+        <input type="text" id="isbnInput" placeholder="Enter ISBN (e.g., 9785890595904)">
+        <button onclick="searchBook()">Search</button>
     </div>
 
-    <div id="loading" class="loading">Fetching data from shops and APIs...</div>
+    <div id="loading">⏳ Connecting to database...</div>
+    <div id="error-msg"></div>
 
-    <div id="results" class="result-section">
-        <div class="book-header">
-            <h2 id="dispTitle" style="margin:0">Book Title</h2>
-            <p id="dispIsbn" style="color: var(--gray); margin: 5px 0 0 0;">ISBN: ---</p>
-        </div>
-
-        <h3>Availability</h3>
-        <table class="shop-table">
+    <div id="results">
+        <div id="bookDetail" class="book-info" style="display:none;"></div>
+        <table id="shopsTable">
             <thead>
                 <tr>
-                    <th>Store</th>
-                    <th>Availability</th>
+                    <th>Bookstore</th>
                     <th>Price</th>
+                    <th>Status</th>
                 </tr>
             </thead>
-            <tbody id="shopBody"></tbody>
+            <tbody id="tableBody"></tbody>
         </table>
-
-        <h3>Physical Specifications</h3>
-        <div class="specs-grid">
-            <div class="spec-card">
-                <span class="spec-label">Height</span>
-                <span class="spec-value" id="specH">--</span>
-            </div>
-            <div class="spec-card">
-                <span class="spec-label">Width</span>
-                <span class="spec-value" id="specW">--</span>
-            </div>
-            <div class="spec-card">
-                <span class="spec-label">Thickness</span>
-                <span class="spec-value" id="specT">--</span>
-            </div>
-            <div class="spec-card">
-                <span class="spec-label">Weight (Est)</span>
-                <span class="spec-value" id="specWeight">--</span>
-            </div>
-        </div>
     </div>
-</div>
 
-<script>
-    let masterData = { shops: [], books: {} };
+    <script>
+        let masterData = null;
 
-    // 1. Load the database generated by your Python script
-    fetch('books_lookup.json')
-        .then(response => response.json())
-        .then(data => { masterData = data; })
-        .catch(err => console.error("Error loading JSON database:", err));
-
-    async function handleSearch() {
-        const input = document.getElementById('isbnInput').value.trim().replace(/[-\s]/g, '');
-        if (!input) return;
-
-        const resultsDiv = document.getElementById('results');
-        const loadingDiv = document.getElementById('loading');
-        
-        loadingDiv.style.display = 'block';
-        resultsDiv.style.display = 'none';
-
-        const localBook = masterData.books[input];
-        const shopList = masterData.shops;
-
-        // Update Header
-        document.getElementById('dispTitle').innerText = localBook ? localBook.title : "Book Not in Local Database";
-        document.getElementById('dispIsbn').innerText = `ISBN: ${input}`;
-
-        // 2. Build Shop Table
-        const tbody = document.getElementById('shopBody');
-        tbody.innerHTML = '';
-
-        shopList.forEach(shopName => {
-            const row = document.createElement('tr');
-            let statusBadge = '';
-            let priceText = '-';
-
-            if (localBook && localBook.availability[shopName]) {
-                const info = localBook.availability[shopName];
-                priceText = info.price ? `€${info.price}` : 'N/A';
-                statusBadge = info.in_stock 
-                    ? '<span class="status-pill instock">In Stock</span>' 
-                    : '<span class="status-pill outstock">Out of Stock</span>';
-            } else {
-                statusBadge = '<span class="status-pill notcarried">Not Carried</span>';
-            }
-
-            row.innerHTML = `<td>${shopName}</td><td>${statusBadge}</td><td>${priceText}</td>`;
-            tbody.appendChild(row);
-        });
-
-        // 3. Fetch Technical Specs from Google Books API
-        try {
-            const apiResp = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${input}`);
-            const apiData = await apiResp.json();
-
-            if (apiData.totalItems > 0) {
-                const vol = apiData.items[0].volumeInfo;
-                const dims = vol.dimensions || {};
+        // LOAD DATA ON STARTUP
+        window.onload = async () => {
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error-msg');
+            
+            try {
+                // Use a 'cache-buster' timestamp to ensure we don't load an old version of the file
+                const response = await fetch('books_lookup.json?v=' + Date.now());
                 
-                document.getElementById('specH').innerText = dims.height || 'N/A';
-                document.getElementById('specW').innerText = dims.width || 'N/A';
-                document.getElementById('specT').innerText = dims.thickness || 'N/A';
+                if (!response.ok) {
+                    throw new Error(`Database file not found (Status ${response.status}). Ensure 'books_lookup.json' is in the main folder.`);
+                }
                 
-                // Estimate weight based on page count if physical weight is missing
-                if (vol.pageCount) {
-                    const estWeight = Math.round(vol.pageCount * 1.2); // Rough multiplier for paper weight
-                    document.getElementById('specWeight').innerText = `${estWeight}g`;
-                } else {
-                    document.getElementById('specWeight').innerText = 'N/A';
+                masterData = await response.json();
+                
+                if (!masterData.books || Object.keys(masterData.books).length === 0) {
+                    throw new Error("The database is empty. Check your Python script output.");
                 }
 
-                // If local name was missing, use API name
-                if (!localBook) document.getElementById('dispTitle').innerText = vol.title;
-            } else {
-                resetSpecs();
+                loadingDiv.style.display = 'none';
+                console.log("Successfully loaded " + Object.keys(masterData.books).length + " books.");
+
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
+                console.error("Initialization Error:", error);
             }
-        } catch (error) {
-            console.error("API Fetch failed", error);
-            resetSpecs();
+        };
+
+        // SEARCH FUNCTION
+        function searchBook() {
+            const input = document.getElementById('isbnInput').value.trim().replace(/-/g, '');
+            const table = document.getElementById('shopsTable');
+            const tableBody = document.getElementById('tableBody');
+            const bookDetail = document.getElementById('bookDetail');
+            const errorDiv = document.getElementById('error-msg');
+
+            // Reset UI
+            tableBody.innerHTML = '';
+            table.style.display = 'none';
+            bookDetail.style.display = 'none';
+            errorDiv.style.display = 'none';
+
+            if (!masterData) {
+                alert("Database is still loading or failed to load.");
+                return;
+            }
+
+            if (masterData.books[input]) {
+                const book = masterData.books[input];
+                
+                // Show Book Title
+                bookDetail.innerHTML = `<h3>Found: ${book.title}</h3><p>ISBN: ${input}</p>`;
+                bookDetail.style.display = 'block';
+
+                // Build Table
+                for (const [shop, info] of Object.entries(book.availability)) {
+                    const row = `<tr>
+                        <td>${shop}</td>
+                        <td>${info.price}</td>
+                        <td class="${info.in_stock ? 'in-stock' : 'out-of-stock'}">
+                            ${info.in_stock ? '✅ In Stock' : '❌ Out of Stock'}
+                        </td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                }
+                table.style.display = 'table';
+            } else {
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `No data found for ISBN: ${input}. Try another!`;
+            }
         }
 
-        loadingDiv.style.display = 'none';
-        resultsDiv.style.display = 'block';
-    }
-
-    function resetSpecs() {
-        document.getElementById('specH').innerText = 'N/A';
-        document.getElementById('specW').innerText = 'N/A';
-        document.getElementById('specT').innerText = 'N/A';
-        document.getElementById('specWeight').innerText = 'N/A';
-    }
-
-    // Allow Enter key to trigger search
-    document.getElementById('isbnInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearch();
-    });
-</script>
-
+        // Allow pressing "Enter" to search
+        document.getElementById('isbnInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') searchBook();
+        });
+    </script>
 </body>
 </html>
