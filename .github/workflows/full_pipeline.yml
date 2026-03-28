@@ -25,7 +25,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Step 1 - Run Scraper
-        run: python shopify_scraper2.py 
+        # Добавляем флаг -u для вывода логов в реальном времени
+        run: python -u shopify_scraper2.py
 
       - name: Step 2 - Organize Files
         run: |
