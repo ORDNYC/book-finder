@@ -32,7 +32,7 @@ jobs:
         pip install requests pandas
 
     - name: Run Scraper
-      run: python scraper.py
+      run: python shopify_scraper2.py
 
     - name: Commit and Push results
       run: |
