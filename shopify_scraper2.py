@@ -5,7 +5,6 @@ import time
 import json
 import os
 from datetime import datetime
-import isbnlib
 
 # --- CONFIGURATION ---
 SHOPS = {
@@ -18,32 +17,38 @@ SHOPS = {
     'pishite_grishite': {'url': 'https://pishite-grishite.com', 'currency': 'ILS', 'lookup_isbn': False}
 }
 
-REQUEST_DELAY = 1.5  # Секунд между страницами
-LOOKUP_DELAY = 1.0   # Секунд между запросами к Open Library
-TIMEOUT = 5          # Тайм-аут для внешних API
+REQUEST_DELAY = 1.5  # Пауза между страницами
+LOOKUP_DELAY = 1.0   # Пауза для Open Library
+TIMEOUT = 10         # Тайм-аут запроса
 OUTPUT_DIR = "."
 
-# Кэш для ISBN, чтобы не искать одну и ту же книгу дважды
+# Кэш для ISBN
 LOOKUP_CACHE = {}
 
+# Заголовки, чтобы прикидываться браузером
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json'
+}
+
 def get_exchange_rates():
-    """Получает актуальные курсы валют из ЕЦБ (к EUR)"""
+    """Получает курсы валют из ЕЦБ"""
     print("Fetching live exchange rates from ECB...")
-    rates = {'EUR': 1.0, 'USD': 1.1} # Значения по умолчанию
+    rates = {'EUR': 1.0}
     try:
-        response = requests.get("https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml", timeout=10)
+        response = requests.get("https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml", timeout=TIMEOUT)
         for curr in ['CZK', 'ILS', 'USD']:
             match = re.search(f'currency=["\']{curr}["\']\s+rate=["\']([\d.]+)["\']', response.text)
             if match:
                 rates[curr] = 1.0 / float(match.group(1))
-        print(f"Rates loaded: CZK->EUR: {rates.get('CZK'):.4f}, ILS->EUR: {rates.get('ILS'):.4f}")
+        print(f"Rates loaded: CZK->EUR: {rates.get('CZK', 0):.4f}, ILS->EUR: {rates.get('ILS', 0):.4f}")
     except Exception as e:
-        print(f"Error fetching rates: {e}. Using fallback constants.")
+        print(f"Error fetching rates: {e}. Using safe fallbacks.")
         rates.update({'CZK': 0.040, 'ILS': 0.25})
     return rates
 
 def clean_isbn(text):
-    """Извлекает только цифры ISBN из строки"""
+    """Оставляет только цифры и проверяет длину"""
     if not text: return None
     digits = re.sub(r'\D', '', str(text))
     if len(digits) in [10, 13]:
@@ -51,21 +56,20 @@ def clean_isbn(text):
     return None
 
 def extract_isbn_from_html(html_content):
-    """Улучшенный поиск ISBN в HTML описании товара"""
+    """Ищет ISBN в тексте описания товара (решает проблему NM Books)"""
     if not html_content: return None
     
-    # Очищаем от HTML тегов
+    # Очистка от HTML тегов
     text = re.sub(r'<[^>]+>', ' ', html_content)
     
-    # Ищем паттерн ISBN: 978... или ISBN 978...
-    # Позволяет любые разделители между цифрами
+    # Поиск по ключевому слову ISBN
     pattern = r'(?:ISBN|isbn|Издание)[-:\s]*([\d\s-]{10,20})'
     match = re.search(pattern, text)
     if match:
         found = clean_isbn(match.group(1))
         if found: return found
         
-    # Резервный поиск: просто любая группа из 13 цифр, начинающаяся на 978/979
+    # Резервный поиск любой строки из 13 цифр на 978/979
     fallback = re.search(r'\b(97[89][\d-]{10,15})\b', text)
     if fallback:
         return clean_isbn(fallback.group(1))
@@ -73,38 +77,32 @@ def extract_isbn_from_html(html_content):
     return None
 
 def open_library_lookup(title):
-    """Поиск ISBN через Open Library API по названию"""
+    """Поиск через Open Library если ISBN не найден на сайте"""
     if not title or title in LOOKUP_CACHE:
         return LOOKUP_CACHE.get(title)
     
-    # Очищаем название для поиска (убираем спецсимволы)
     search_title = re.sub(r'[^\w\s]', '', title).strip()
-    
     try:
         time.sleep(LOOKUP_DELAY)
         url = f"https://openlibrary.org/search.json?title={requests.utils.quote(search_title)}&limit=1"
-        resp = requests.get(url, timeout=TIMEOUT)
+        resp = requests.get(url, timeout=TIMEOUT, headers=HEADERS)
         data = resp.json()
-        
         if data.get('docs'):
             isbns = data['docs'][0].get('isbn', [])
             for i in isbns:
                 clean = clean_isbn(i)
                 if clean and clean.startswith('978'):
                     LOOKUP_CACHE[title] = clean
-                    print(f"    > Found ISBN for '{title[:30]}...': {clean}")
                     return clean
-    except Exception as e:
-        print(f"    ! Lookup failed for '{title[:30]}...': {e}")
+    except:
+        pass
     
     LOOKUP_CACHE[title] = None
     return None
 
 def scrape_shopify(shop_id, config, rates):
-    """Основная функция скрапинга одного магазина"""
     base_url = config['url']
-    currency_code = config['currency']
-    rate = rates.get(currency_code, 1.0)
+    rate = rates.get(config['currency'], 1.0)
     all_products = []
     page = 1
     
@@ -112,35 +110,35 @@ def scrape_shopify(shop_id, config, rates):
     
     while True:
         try:
-            params = {'page': page, 'limit': 250}
-            resp = requests.get(f"{base_url}/products.json", params=params, timeout=15)
-            if resp.status_code != 200: break
+            url = f"{base_url}/products.json?page={page}&limit=250"
+            resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
             
+            if resp.status_code != 200:
+                print(f"  ! Status {resp.status_code}. Stopping.")
+                break
+                
             products = resp.json().get('products', [])
             if not products: break
             
             for p in products:
                 title = p.get('title')
                 handle = p.get('handle')
-                vendor = p.get('vendor', '')
                 
-                # Пробуем найти ISBN всеми способами
+                # 1. Пробуем Barcode -> 2. SKU -> 3. Текст описания
                 isbn = clean_isbn(p.get('variants', [{}])[0].get('barcode')) or \
                        clean_isbn(p.get('variants', [{}])[0].get('sku')) or \
                        extract_isbn_from_html(p.get('body_html'))
                 
-                # Если все еще нет ISBN и включен глубокий поиск
+                # 4. Если всё еще нет - Open Library (только если разрешено в конфиге)
                 if not isbn and config['lookup_isbn']:
                     isbn = open_library_lookup(title)
                 
-                # Данные о цене
-                variant = p['variants'][0]
-                price_orig = float(variant.get('price', 0))
+                price_orig = float(p['variants'][0].get('price', 0))
                 price_eur = round(price_orig * rate, 2)
                 
                 all_products.append({
                     'title': title,
-                    'vendor': vendor,
+                    'vendor': p.get('vendor', ''),
                     'isbn': isbn if isbn else 'N/A',
                     'price_eur': price_eur,
                     'link': f"{base_url}/products/{handle}",
@@ -148,7 +146,7 @@ def scrape_shopify(shop_id, config, rates):
                     'updated_at': datetime.now().strftime("%Y-%m-%d")
                 })
             
-            print(f"  > Page {page}: {len(products)} products fetched.")
+            print(f"  > Page {page}: {len(products)} products.")
             page += 1
             time.sleep(REQUEST_DELAY)
             
@@ -165,12 +163,10 @@ def main():
     for shop_id, config in SHOPS.items():
         shop_data = scrape_shopify(shop_id, config, rates)
         if shop_data:
-            # Сохраняем отдельный CSV для каждого магазина (для отладки)
-            df = pd.DataFrame(shop_data)
-            df.to_csv(f"{OUTPUT_DIR}/{shop_id}.csv", index=False)
+            pd.DataFrame(shop_data).to_csv(f"{OUTPUT_DIR}/{shop_id}.csv", index=False)
             total_data.extend(shop_data)
             
-    print(f"\nSuccess! Total books found: {len(total_data)}")
+    print(f"\nFinished! Total entries: {len(total_data)}")
 
 if __name__ == "__main__":
     main()
