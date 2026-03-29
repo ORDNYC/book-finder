@@ -11,13 +11,11 @@ class BookScraper:
         self.debug = debug
         # --- ALL SHOP CONFIGURATION ---
         self.shops = {
-            'babel_books_berlin': {'url': 'https://babelbooks.de', 'currency': 'EUR', 'lookup': False},
+            'babel_books_berlin': {'url': 'https://babelbooksberlin.com', 'currency': 'EUR', 'lookup': False},
             'nm_books': {'url': 'https://nmbooks.shop', 'currency': 'CZK', 'lookup': True},
-            'belaya_vorona': {'url': 'https://vvorona.eu', 'currency': 'EUR', 'lookup': False},
+            'belaya_vorona': {'url': 'https://belayavorona.eu', 'currency': 'EUR', 'lookup': False},
             'knigomania': {'url': 'https://knigomania.org', 'currency': 'EUR', 'lookup': False},
-            'muha_books': {'url': 'https://muhabooks.com', 'currency': 'EUR', 'lookup': False},
-            'rewind_store': {'url': 'https://rewind-store.de', 'currency': 'EUR', 'lookup': False},
-            'pishite_grishite': {'url': 'https://pishite-grishite.com', 'currency': 'ILS', 'lookup': False},
+                    'rewind_store': {'url': 'https://rewindstore.eu', 'currency': 'EUR', 'lookup': False},
             'notre_locus': {'url': 'https://notrelocus.com', 'currency': 'GBP', 'lookup': False},
         }
         self.headers = {
