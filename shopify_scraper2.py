@@ -14,7 +14,8 @@ SHOPS = {
     'knigomania': {'url': 'https://knigomania.org', 'currency': 'EUR', 'lookup_isbn': False},
     'muha_books': {'url': 'https://muhabooks.com', 'currency': 'EUR', 'lookup_isbn': False},
     'rewind_store': {'url': 'https://rewind-store.de', 'currency': 'EUR', 'lookup_isbn': False},
-    'pishite_grishite': {'url': 'https://pishite-grishite.com', 'currency': 'ILS', 'lookup_isbn': False}
+    'pishite_grishite': {'url': 'https://pishite-grishite.com', 'currency': 'ILS', 'lookup_isbn': False},
+    'notre_locus': {'url': 'https://notrelocus.com', 'currency': 'GBP', 'lookup_isbn': False},
 }
 
 REQUEST_DELAY = 1.5  # Пауза между страницами
