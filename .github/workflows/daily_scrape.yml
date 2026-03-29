@@ -2,24 +2,18 @@ name: Daily Book Scrape
 
 on:
   schedule:
-    # Runs every day at midnight. 
-    # Change to '0 */6 * * *' if you really want every 6 hours.
-    - cron: '0 0 * * *'
-  workflow_dispatch: # Allows you to click "Run workflow" manually
+    - cron: '0 0 * * *' # Midnight UTC
+  workflow_dispatch: 
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    # Crucial: This gives the bot permission to upload files back to your repo
     permissions:
       contents: write
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        # Fetch all history so rebase works correctly
         fetch-depth: 0 
 
     - name: Set up Python
@@ -28,25 +22,16 @@ jobs:
         python-version: '3.10'
 
     - name: Install dependencies
-      run: |
-        pip install requests pandas
+      run: pip install requests pandas
 
     - name: Run Scraper
-      run: python shopify_scraper2.py
+      run: python scraper.py
 
-    - name: Commit and Push results
+    - name: Commit and Push
       run: |
         git config --global user.name "GitHub Action Bot"
         git config --global user.email "actions@github.com"
-        
-        # Add all CSV files and the ISBN cache
-        git add *.csv isbn_cache.json
-        
-        # Commit changes. If no changes, the '|| exit 0' prevents the workflow from failing.
-        git commit -m "Automated update: $(date +'%Y-%m-%d %H:%M')" || exit 0
-        
-        # Pull any remote changes (like manual edits) and put our new data on top
+        git add *.csv
+        git commit -m "Daily Update: $(date +'%Y-%m-%d')" || exit 0
         git pull --rebase origin main
-        
-        # Push the final combined version back to GitHub
         git push origin main
